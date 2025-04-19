@@ -1,5 +1,5 @@
 import { Request, Response, Router } from "express";
-import Admin from "../models/admin";
+import Admin from "../models/Admin";
 
 const router = Router();
 
