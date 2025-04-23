@@ -68,24 +68,28 @@ export const createApplication = async (req: Request, res: Response): Promise<vo
 //get applications by you
 
 export const getUserApplications = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const userId = req.headers["user-id"]
-  
-      if (!userId) {
-        res.status(401).json({ error: "Unauthorized: Missing user ID" })
-        return
-      }
-  
-      const applications = await Application.find({ seeker: userId })
-        .populate("gig") // optionally populate gig details
-        .sort({ appliedAt: -1 })
-  
-      res.status(200).json(applications)
-    } catch (error) {
-      console.error("Error fetching user's applications:", error)
-      res.status(500).json({ error: "Error fetching user's applications" })
+  try {
+    const userId = req.headers["user-id"]
+
+    if (!userId) {
+      res.status(401).json({ error: "Unauthorized: Missing user ID" })
+      return
     }
+
+    const applications = await Application.find({ seeker: userId })
+      .populate({
+        path: "gig",
+        select: "title company city state country type userId", // Make sure userId is included
+      })
+      .sort({ appliedAt: -1 })
+
+    res.status(200).json(applications)
+  } catch (error) {
+    console.error("Error fetching user's applications:", error)
+    res.status(500).json({ error: "Error fetching user's applications" })
   }
+}
+
 
 
   //get gigapplications
@@ -156,6 +160,58 @@ export const getGigApplications = async (req: Request, res: Response): Promise<v
     } catch (error) {
       console.error('Error saving application:', error);
       res.status(500).json({ error: "Failed to save interview details" });
+    }
+  };
+  
+
+  //hire applicant
+  export const hireApplicant = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { applicationId } = req.params;
+      const { startDate } = req.body;
+  
+      const application = await Application.findById(applicationId);
+  
+      if (!application) {
+        res.status(404).json({ message: 'Application not found' });
+        return;
+      }
+  
+      application.status = 'hired';
+      application.startDate = startDate;
+  
+      await application.save();
+  
+      res.status(200).json({
+        message: 'Applicant hired successfully',
+        application,
+      });
+    } catch (error) {
+      console.error('Error hiring applicant:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  };
+  
+
+  // reject applicant
+  // reject applicant
+  export const rejectApplicant = async (req: Request, res: Response): Promise<void> => {
+    const { applicationId } = req.params;
+    try {
+      const application = await Application.findById(applicationId);
+  
+      if (!application) {
+        res.status(404).json({ error: "Application not found" });
+        return; // Exit early after sending the response
+      }
+  
+      application.status = "rejected";
+      await application.save();
+  
+      res.status(200).json({ message: "Application rejected successfully" });
+    } catch (error) {
+      console.error("Error rejecting application:", error);
+      res.status(500).json({ error: "Internal server error" });
     }
   };
   

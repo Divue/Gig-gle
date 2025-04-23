@@ -23,7 +23,7 @@ export default async function ChatPage() {
         <p className="text-muted-foreground">Chat with employers and other users</p>
       </div>
 
-      <ChatInterface />
+      <ChatInterface conversationId="default-conversation-id" />
     </div>
   )
 }

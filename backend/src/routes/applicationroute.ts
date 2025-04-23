@@ -4,6 +4,8 @@ import { createApplication } from "../controllers/applicationcontroller"
 import { getUserApplications } from "../controllers/applicationcontroller"
 import { getGigApplications } from "../controllers/applicationcontroller"
 import { scheduleInterview } from "../controllers/applicationcontroller"
+import { hireApplicant } from '../controllers/applicationcontroller';
+import { rejectApplicant } from '../controllers/applicationcontroller';
 
 
 const router = express.Router()
@@ -16,6 +18,9 @@ const upload = multer({ storage })
 router.post("/", upload.single("resume"), createApplication)
 
 router.patch("/schedule-interview/:applicationId", scheduleInterview);
+router.patch('/hire/:applicationId', hireApplicant); // PATCH because it's a partial update
+router.patch('/reject/:applicationId', rejectApplicant);
+
 
 
 // Route to get all applications of a user

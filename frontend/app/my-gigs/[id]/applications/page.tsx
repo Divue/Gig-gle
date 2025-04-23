@@ -23,13 +23,16 @@ import {
   Download,
   Calendar,
 } from "lucide-react"
-import { format } from "date-fns"
-import ScheduleInterviewModal from "./ScheduleInterviewModal" // We'll define this below
+import ScheduleInterviewModal from "./ScheduleInterviewModal"
+import HireApplicantModal from "./HireApplicantModal"
 
 export default function ReviewApplicationsClientPage() {
   const [applications, setApplications] = useState<any[]>([])
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
+  const [showHireModal, setShowHireModal] = useState(false)
+  const [loadingHire, setLoadingHire] = useState<string | null>(null)
+  const [loadingReject, setLoadingReject] = useState<string | null>(null)
 
   const params = useParams()
   const gigId = params?.id as string
@@ -51,9 +54,33 @@ export default function ReviewApplicationsClientPage() {
     setShowModal(true)
   }
 
+  const handleHireClick = (appId: string) => {
+    setSelectedAppId(appId)
+    setShowHireModal(true)
+  }
+
+  const handleRejectClick = async (appId: string) => {
+    setLoadingReject(appId)
+    try {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/applications/reject/${appId}`, {
+        method: "PATCH",
+      })
+      await fetchApplications()
+    } catch (error) {
+      console.error("Failed to reject application", error)
+    } finally {
+      setLoadingReject(null)
+    }
+  }
+
   const closeModal = () => {
     setSelectedAppId(null)
     setShowModal(false)
+    fetchApplications()
+  }
+
+  const closeHireModal = () => {
+    setShowHireModal(false)
     fetchApplications()
   }
 
@@ -86,14 +113,31 @@ export default function ReviewApplicationsClientPage() {
           </TabsList>
 
           <TabsContent value="applied">
-            <ApplicationList applications={appliedApplications} onScheduleClick={handleScheduleClick} />
+            <ApplicationList
+              applications={appliedApplications}
+              onScheduleClick={handleScheduleClick}
+              onHireClick={handleHireClick}
+              onRejectClick={handleRejectClick}
+              loadingHire={loadingHire}
+              loadingReject={loadingReject}
+            />
           </TabsContent>
+
           <TabsContent value="interview">
-            <ApplicationList applications={interviewApplications} onScheduleClick={handleScheduleClick} />
+            <ApplicationList
+              applications={interviewApplications}
+              onScheduleClick={handleScheduleClick}
+              onHireClick={handleHireClick}
+              onRejectClick={handleRejectClick}
+              loadingHire={loadingHire}
+              loadingReject={loadingReject}
+            />
           </TabsContent>
+
           <TabsContent value="hired">
             <ApplicationList applications={hiredApplications} />
           </TabsContent>
+
           <TabsContent value="rejected">
             <ApplicationList applications={rejectedApplications} />
           </TabsContent>
@@ -103,11 +147,29 @@ export default function ReviewApplicationsClientPage() {
       {showModal && selectedAppId && (
         <ScheduleInterviewModal applicationId={selectedAppId} onClose={closeModal} />
       )}
+
+      {showHireModal && selectedAppId && (
+        <HireApplicantModal applicationId={selectedAppId} onClose={closeHireModal} />
+      )}
     </div>
   )
 }
 
-function ApplicationList({ applications, onScheduleClick }: { applications: any[]; onScheduleClick?: (id: string) => void }) {
+function ApplicationList({
+  applications,
+  onScheduleClick,
+  onHireClick,
+  onRejectClick,
+  loadingHire,
+  loadingReject,
+}: {
+  applications: any[]
+  onScheduleClick?: (id: string) => void
+  onHireClick?: (id: string) => void
+  onRejectClick?: (id: string) => void
+  loadingHire?: string | null
+  loadingReject?: string | null
+}) {
   if (applications.length === 0) {
     return (
       <div className="text-center py-12">
@@ -120,26 +182,46 @@ function ApplicationList({ applications, onScheduleClick }: { applications: any[
   return (
     <div className="grid gap-6">
       {applications.map((app) => (
-        <ApplicationCard key={app._id} application={app} onScheduleClick={onScheduleClick} />
+        <ApplicationCard
+          key={app._id}
+          application={app}
+          onScheduleClick={onScheduleClick}
+          onHireClick={onHireClick}
+          onRejectClick={onRejectClick}
+          loadingHire={loadingHire}
+          loadingReject={loadingReject}
+        />
       ))}
     </div>
   )
 }
 
-function ApplicationCard({ application, onScheduleClick }: { application: any; onScheduleClick?: (id: string) => void }) {
-  const status = application.status
-
+function ApplicationCard({
+  application,
+  onScheduleClick,
+  onHireClick,
+  onRejectClick,
+  loadingHire,
+  loadingReject,
+}: {
+  application: any
+  onScheduleClick?: (id: string) => void
+  onHireClick?: (id: string) => void
+  onRejectClick?: (id: string) => void
+  loadingHire?: string | null
+  loadingReject?: string | null
+}) {
   return (
     <Card>
       <CardHeader className="pb-2">
         <div className="flex justify-between">
           <div className="flex gap-3">
             <Avatar>
-              <AvatarImage src={application.avatar || "/placeholder.svg"} alt={application.name || "Unnamed Seeker"} />
+              <AvatarImage src={application.avatar || "/placeholder.svg"} />
               <AvatarFallback>{application.name?.[0]}</AvatarFallback>
             </Avatar>
             <div>
-              <CardTitle className="text-lg">{application.name || "Unnamed Seeker"}</CardTitle>
+              <CardTitle className="text-lg">{application.name}</CardTitle>
               <CardDescription>{application.seeker}</CardDescription>
             </div>
           </div>
@@ -155,13 +237,7 @@ function ApplicationCard({ application, onScheduleClick }: { application: any; o
                   : "destructive"
               }
             >
-              {application.status === "applied"
-                ? "Applied"
-                : application.status === "interview"
-                ? "Interview Scheduled"
-                : application.status === "hired"
-                ? "Hired"
-                : "Rejected"}
+              {application.status.charAt(0).toUpperCase() + application.status.slice(1)}
             </Badge>
             <span className="text-xs text-muted-foreground">
               Applied {new Date(application.appliedAt).toLocaleDateString()}
@@ -170,110 +246,107 @@ function ApplicationCard({ application, onScheduleClick }: { application: any; o
         </div>
       </CardHeader>
 
-      <CardContent className="pb-2">
-        <div className="space-y-4">
-          <div>
-            <h3 className="text-sm font-medium mb-1">Cover Letter</h3>
-            <p className="text-sm text-muted-foreground">{application.coverLetter || "None provided"}</p>
-          </div>
-
-          <div>
-            <h3 className="text-sm font-medium mb-1">Accommodations Needed</h3>
-            <p className="text-sm text-muted-foreground">{application.accommodationNeeded || "None specified"}</p>
-          </div>
-
-          {/* New Fields */}
-          {application.gender && (
-            <div>
-              <h3 className="text-sm font-medium mb-1">Gender</h3>
-              <p className="text-sm text-muted-foreground">{application.gender}</p>
-            </div>
-          )}
-
-          {application.age && (
-            <div>
-              <h3 className="text-sm font-medium mb-1">Age</h3>
-              <p className="text-sm text-muted-foreground">{application.age}</p>
-            </div>
-          )}
-
-          {application.disability && (
-            <div>
-              <h3 className="text-sm font-medium mb-1">Disability</h3>
-              <p className="text-sm text-muted-foreground">{application.disability}</p>
-            </div>
-          )}
-
-          {application.status === "interview" && application.interview?.date && (
-            <div className="flex items-center gap-1 text-sm font-medium">
-              <Calendar className="h-4 w-4" />
-              <span>Interview scheduled for {new Date(application.interview.date).toLocaleDateString()}</span>
-            </div>
-          )}
-
-          {application.status === "hired" && application.startDate && (
-            <div className="flex items-center gap-1 text-sm font-medium text-green-600 dark:text-green-500">
-              <CheckCircle className="h-4 w-4" />
-              <span>Start date: {new Date(application.startDate).toLocaleDateString()}</span>
-            </div>
-          )}
+      <CardContent className="pb-2 space-y-4">
+        <div>
+          <h3 className="text-sm font-medium mb-1">Cover Letter</h3>
+          <p className="text-sm text-muted-foreground">{application.coverLetter || "None provided"}</p>
         </div>
+
+        <div>
+          <h3 className="text-sm font-medium mb-1">Accommodations Needed</h3>
+          <p className="text-sm text-muted-foreground">{application.accommodationNeeded || "None specified"}</p>
+        </div>
+
+        {application.gender && (
+          <div>
+            <h3 className="text-sm font-medium mb-1">Gender</h3>
+            <p className="text-sm text-muted-foreground">{application.gender}</p>
+          </div>
+        )}
+
+        {application.age && (
+          <div>
+            <h3 className="text-sm font-medium mb-1">Age</h3>
+            <p className="text-sm text-muted-foreground">{application.age}</p>
+          </div>
+        )}
+
+        {application.disability && (
+          <div>
+            <h3 className="text-sm font-medium mb-1">Disability</h3>
+            <p className="text-sm text-muted-foreground">{application.disability}</p>
+          </div>
+        )}
+
+        {application.status === "interview" && application.interview?.date && (
+          <div className="flex items-center gap-1 text-sm font-medium">
+            <Calendar className="h-4 w-4" />
+            <span>Interview on {new Date(application.interview.date).toLocaleDateString()}</span>
+          </div>
+        )}
+
+        {application.status === "hired" && application.startDate && (
+          <div className="flex items-center gap-1 text-sm font-medium text-green-600 dark:text-green-500">
+            <CheckCircle className="h-4 w-4" />
+            <span>Start date: {new Date(application.startDate).toLocaleDateString()}</span>
+          </div>
+        )}
       </CardContent>
 
-      <CardFooter className="pt-2">
-        <div className="flex flex-wrap gap-2 w-full">
-          {application.pdf && (
-            <a href={application.pdf} target="_blank" rel="noopener noreferrer">
-              <Button variant="outline" size="sm" className="gap-1">
-                <Download className="h-4 w-4" />
-                Resume
-              </Button>
-            </a>
-          )}
-
-          <Link href={`/chat?applicant=${application.seeker}`} className="flex-1">
-            <Button variant="outline" size="sm" className="w-full gap-1">
-              <MessageCircle className="h-4 w-4" />
-              Message
+      <CardFooter className="pt-2 flex flex-wrap gap-2">
+        {application.pdf && (
+          <a href={application.pdf} target="_blank" rel="noopener noreferrer">
+            <Button variant="outline" size="sm" className="gap-1">
+              <Download className="h-4 w-4" />
+              Resume
             </Button>
-          </Link>
+          </a>
+        )}
 
-          {onScheduleClick && (
-            <Button
-              variant="secondary"
-              size="sm"
-              className="w-full gap-1"
-              onClick={() => onScheduleClick(application._id)}
-            >
-              <Calendar className="h-4 w-4" />
-              Schedule Interview
-            </Button>
-          )}
+        <Link href={`/chat?applicant=${application.seeker}`} className="flex-1">
+          <Button variant="outline" size="sm" className="w-full gap-1">
+            <MessageCircle className="h-4 w-4" />
+            Message
+          </Button>
+        </Link>
 
-          {application.status === "applied" && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full gap-1"
-                onClick={() => alert(`Hiring applicant ${application.name}`)} // Replace with hire logic
-              >
-                <CheckCircle className="h-4 w-4" />
-                Hire
-              </Button>
+        {["applied", "interview"].includes(application.status) && onScheduleClick && (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="w-full gap-1"
+            onClick={() => onScheduleClick(application._id)}
+          >
+            <Calendar className="h-4 w-4" />
+            Schedule Interview
+          </Button>
+        )}
 
-              <Button
-                variant="destructive"
-                size="sm"
-                className="w-full gap-1"
-                onClick={() => alert(`Rejecting applicant ${application.name}`)} // Replace with reject logic
-              >
-                <XCircle className="h-4 w-4" />
-                Reject
-              </Button>
-            </>
-          )}
-        </div>
+        {["applied", "interview"].includes(application.status) && onHireClick && (
+          <Button
+            variant="default"
+            size="sm"
+            className="w-full gap-1"
+            disabled={loadingHire === application._id}
+            onClick={() => onHireClick(application._id)}
+          >
+            <CheckCircle className="h-4 w-4" />
+            {loadingHire === application._id ? "Hiring..." : "Hire"}
+          </Button>
+        )}
+
+        {["applied", "interview"].includes(application.status) && onRejectClick && (
+          <Button
+            variant="destructive"
+            size="sm"
+            className="w-full gap-1"
+            disabled={loadingReject === application._id}
+            onClick={() => onRejectClick(application._id)}
+          >
+            <XCircle className="h-4 w-4" />
+            {loadingReject === application._id ? "Rejecting..." : "Reject"}
+          </Button>
+        )}
       </CardFooter>
     </Card>
   )
